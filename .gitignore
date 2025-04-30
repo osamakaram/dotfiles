@@ -1,0 +1,38 @@
+# macOS files
+.DS_Store
+**/.DS_Store
+dot_DS_Store
+**/dot_DS_Store
+
+# Logs folder
+logs_**/
+
+# Other files to exclude
+.Trashes
+._.Trashes
+._*
+.Spotlight-V100
+.fseventsd
+Icon?
+
+# chezmoi temporary files
+**/chezmoi*.tmp
+
+# Other common exclusions
+*.log
+*.bak
+*.tmp
+*.swp
+*~
+
+# .env
+.env
+# Sensitive information
+*.key
+*.pem
+*.crt
+*.env
+*.enc
+*.p12
+*.pfx
+dot_cursor/mcp.json

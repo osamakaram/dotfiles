@@ -1,0 +1,28 @@
+# chezmoi configuration file
+# Template variables are defined here
+
+data:
+  name: "{{ .chezmoi.username }}"
+  email: "{{ if eq .chezmoi.os "darwin" }}mail@osamakaram.com{{ else }}mail@osamakaram.com{{ end }}"
+  
+  # Git configuration
+  git:
+    name: "Osama Karam"
+    email: "mail@osamakaram.com"
+    signingkey: "{{ if eq .chezmoi.os "darwin" }}~/.ssh/id_ed25519_osamakaram{{ else }}~/.ssh/id_ed25519{{ end }}"
+  
+  # OS specific configuration
+  os:
+    darwin: {{ eq .chezmoi.os "darwin" }}
+    linux: {{ eq .chezmoi.os "linux" }}
+  
+  # Enable or disable features
+  features:
+    gpg: true
+    ssh: true
+    development: true
+
+# Hooks: run these after operations
+run_after:
+  apply:
+    - path: scripts/macos-defaults.sh

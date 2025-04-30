@@ -1,0 +1,37 @@
+# ~/.zprofile: Login shell configuration
+
+# Guard against recursion
+if [[ -n "$__ZPROFILE_SOURCED" ]]; then
+  return
+fi
+export __ZPROFILE_SOURCED=1
+
+# Platform-specific system profile sourcing
+# Safely source system profile files if they exist
+if [[ "$OSTYPE" == "linux-gnu"* ]]; then
+  [[ -f /etc/zsh/zprofile && -r /etc/zsh/zprofile ]] && source /etc/zsh/zprofile
+elif [[ "$OSTYPE" == "darwin"* ]]; then
+  [[ -f /etc/zprofile && -r /etc/zprofile ]] && source /etc/zprofile
+fi
+
+# Preserve user-defined PATH before sourcing system profile
+if [[ -f /etc/profile && -r /etc/profile ]]; then
+  __ZPROFILE_PRE_PATH="$PATH"
+  source /etc/profile
+  [[ ":$PATH:" != *":$__ZPROFILE_PRE_PATH:"* ]] && PATH="$__ZPROFILE_PRE_PATH:$PATH"
+  unset __ZPROFILE_PRE_PATH
+fi
+
+# Start tmux automatically on SSH login (non-nested, interactive)
+if [[ -n "$SSH_CONNECTION" && -z "$TMUX" && -n "$PS1" && $- == *i* ]]; then
+  if command -v tmux >/dev/null; then
+    exec tmux new-session -A -s main
+  fi
+fi
+
+# Source .zshrc explicitly on login shells ONLY if this is an interactive shell
+# This avoids the infinite recursion between .zprofile and .zshrc
+if [[ -o interactive && -f ~/.zshrc && -r ~/.zshrc && -z "$__ZSHRC_SOURCED" ]]; then
+  export __ZSHRC_SOURCED=1
+  source ~/.zshrc
+fi

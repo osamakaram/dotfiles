@@ -1,0 +1,43 @@
+# ~/.zshenv: Universal shell environment for all contexts (interactive, login, non-login)
+
+# Skip this file for non-interactive or non-login shells if we're not the primary zshenv
+# This prevents multiple recursive sourcing
+if [[ -n "$__ZSHENV_SOURCED" ]]; then
+  return
+fi
+export __ZSHENV_SOURCED=1
+
+# XDG Base Directory Specification (respects existing values if set)
+export XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
+export XDG_DATA_HOME="${XDG_DATA_HOME:-$HOME/.local/share}"
+export XDG_CACHE_HOME="${XDG_CACHE_HOME:-$HOME/.cache}"
+export XDG_STATE_HOME="${XDG_STATE_HOME:-$HOME/.local/state}"
+
+# Core environment
+export LANG="en_US.UTF-8"
+export LC_ALL="en_US.UTF-8"
+export TERM="xterm-256color"
+export EDITOR="${EDITOR:-nano}"
+export VISUAL="${VISUAL:-$EDITOR}"
+export PAGER="less"
+export LESSHISTFILE="-"
+
+# Conservative default PATH, extended by platform-specific logic (only if not already set)
+if [[ -z "$__PATH_SET" ]]; then
+  export PATH="/usr/local/bin:/usr/bin:/bin:/usr/local/sbin:/usr/sbin:/sbin:$HOME/.local/bin"
+  export __PATH_SET=1
+
+  # macOS Homebrew paths (Apple Silicon or Intel, depending on architecture)
+  if [[ "$OSTYPE" == "darwin"* ]]; then
+    if [[ -d /opt/homebrew/bin ]]; then
+      # Apple Silicon
+      export PATH="/opt/homebrew/bin:/opt/homebrew/sbin:$PATH"
+    elif [[ -d /usr/local/Homebrew ]]; then
+      # Intel Mac
+      export PATH="/usr/local/bin:/usr/local/sbin:$PATH"
+    fi
+  fi
+fi
+
+# Ensure required dirs exist for runtime files
+mkdir -p "$XDG_CONFIG_HOME" "$XDG_CACHE_HOME" "$XDG_DATA_HOME" "$XDG_STATE_HOME" &>/dev/null

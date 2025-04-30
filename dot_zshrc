@@ -1,0 +1,474 @@
+# ~/.zshrc – Interactive shell configuration for macOS and Ubuntu
+
+# Fast return for non-interactive shells
+[[ $- != *i* ]] && return
+
+# Enable zsh profiling
+# typeset -g __ZSHRC_PROFILED=0
+# if [[ -z "$ZSHRC_PROFILED_ONCE" ]]; then
+#   export ZSHRC_PROFILED_ONCE=1
+#   zmodload zsh/zprof
+#   __ZSHRC_PROFILED=1
+# fi
+
+# Export forgit config variables - MUST be done BEFORE plugin loading
+export FORGIT_INSTALL_DIR="/opt/homebrew/opt/forgit"
+export FORGIT_FZF_DEFAULT_OPTS="--height 40% --layout=reverse --border --preview-window right:60%"
+export FORGIT_LOG_GRAPH_ENABLE=1
+export FORGIT_DIFF_SO_FANCY_ENABLE=1
+if command -v delta >/dev/null 2>&1; then
+  export FORGIT_DIFF_COMMAND="git diff --color=always | delta"
+fi
+
+# ===== HISTORY CONFIGURATION =====
+HISTFILE="$HOME/.zsh_history"
+HISTSIZE=50000
+SAVEHIST=50000
+
+setopt EXTENDED_HISTORY          # Write timestamp and duration
+setopt SHARE_HISTORY             # Share history between sessions
+setopt HIST_EXPIRE_DUPS_FIRST    # Expire duplicates first
+setopt HIST_IGNORE_DUPS          # Don't record duplicate commands
+setopt HIST_IGNORE_ALL_DUPS      # Remove old duplicates
+setopt HIST_FIND_NO_DUPS         # Don't display duplicates in search
+setopt HIST_IGNORE_SPACE         # Don't record commands starting with space
+setopt HIST_SAVE_NO_DUPS         # Don't write duplicate entries
+setopt HIST_REDUCE_BLANKS        # Remove extra blanks
+setopt HIST_VERIFY               # Verify before executing history
+
+# ===== CORE ZSH OPTIONS =====
+setopt AUTO_CD                   # Change directory without cd
+setopt EXTENDED_GLOB             # Extended globbing
+setopt NOTIFY                    # Report status of background jobs immediately
+setopt PROMPT_SUBST              # Enable parameter expansion in prompts
+setopt INTERACTIVE_COMMENTS      # Allow comments in interactive shells
+setopt AUTO_PUSHD                # Push directories automatically
+setopt PUSHD_IGNORE_DUPS         # Don't push duplicates
+setopt PUSHD_MINUS               # Use +/- operators for directory stack
+
+# === Completion Initialization (HEAVILY OPTIMIZED) ===
+# Setup minimal completions initially, then load full completions later
+_comps_initialization_is_deferred=1
+
+# Setup function for deferred completion initialization
+_deferred_completion_setup() {
+  # Don't run this more than once
+  [[ -z "$_comps_initialization_is_deferred" ]] && return
+  unset _comps_initialization_is_deferred
+
+  zstyle ':completion:*' use-cache on
+  zstyle ':completion:*' cache-path "$HOME/.zcompcache"
+  zstyle ':completion::complete:*' rehash true
+  zstyle ':completion:*' menu select
+  zstyle ':completion:*' matcher-list 'm:{a-zA-Z}={A-Za-z}'
+  zstyle ':completion:*' list-colors "${(s.:.)LS_COLORS}"
+  zstyle ':completion:*' group-name ''
+  zstyle ':completion:*:descriptions' format '[%d]'
+  zstyle ':completion:*' verbose yes
+  zstyle ':completion:*:warnings' format ' %F{red}-- no matches found --%f'
+  zstyle ':completion:*:corrections' format ' %F{green}-- %d (errors: %e) --%f'
+  zstyle ':completion:*:descriptions' format ' %F{yellow}-- %d --%f'
+  zstyle ':completion:*:*:*:*:processes' command "ps -u $USER -o pid,user,comm -w -w"
+  zstyle ':completion:*:*:kill:*:processes' list-colors '=(#b) #([0-9]#) ([0-9a-z-]#)*=01;34=0=01'
+
+  # Optimize completion loading
+  local zcompdump="${ZDOTDIR:-$HOME}/.zcompdump"
+  local zcompdump_cache="${zcompdump}.zwc"
+  
+  # Load and compile completions
+  autoload -Uz compinit
+
+  # Fast, no security check completion initialization
+  compinit -C -d "$zcompdump"
+  
+  # Compile completion cache if needed
+  if [[ ! -f "$zcompdump_cache" || "$zcompdump" -nt "$zcompdump_cache" ]]; then
+    zcompile "$zcompdump"
+  fi
+  
+  # Remove this function from precmd
+  precmd_functions=("${(@)precmd_functions:#_deferred_completion_setup}")
+}
+
+# Load essentials for command completion
+autoload -Uz +X bashcompinit && bashcompinit
+# Defer full completion initialization until after prompt appears
+precmd_functions+=(_deferred_completion_setup)
+
+# === Plugin Search Paths (with cache) ===
+typeset -A plugin_cache
+plugin_paths=(
+  "/opt/homebrew/share"
+  "/usr/local/share"
+  "/usr/share"
+  "/usr/share/zsh"
+  "/usr/share/zsh/plugins"
+  "${XDG_DATA_HOME:-$HOME/.local/share}/zsh/plugins"
+  "${ZDOTDIR:-$HOME}/plugins"
+)
+
+# === Plugins via Homebrew (with more efficient loading) ===
+# Split plugins into essential and deferred
+essential_plugins=(
+  zsh-syntax-highlighting:zsh-syntax-highlighting.zsh
+  zsh-autosuggestions:zsh-autosuggestions.zsh
+)
+
+deferred_plugins=(
+  zsh-abbr:zsh-abbr.zsh 
+  zsh-autopair:autopair.zsh
+  zsh-you-should-use:you-should-use.plugin.zsh
+  zsh-completions:zsh-completions.plugin.zsh
+  forgit:forgit.plugin.zsh
+)
+
+# Function to load plugins
+load_plugin() {
+  local plugin=$1
+  local plugin_name="${plugin%%:*}"
+  local plugin_file="${plugin##*:}"
+  
+  # Re-export forgit variables right before loading the plugin
+  if [[ "$plugin_name" == "forgit" ]]; then
+    export FORGIT_INSTALL_DIR
+    export FORGIT_FZF_DEFAULT_OPTS
+    export FORGIT_LOG_GRAPH_ENABLE
+    export FORGIT_DIFF_SO_FANCY_ENABLE
+    export FORGIT_DIFF_COMMAND
+  fi
+  
+  # Fix for zsh-abbr cat errors - silence stderr
+  if [[ "$plugin_name" == "zsh-abbr" ]]; then
+    exec 3>&2 # Save stderr
+    exec 2>/dev/null # Suppress stderr for zsh-abbr
+  fi
+  
+  if [[ -n ${plugin_cache[$plugin_name]} ]]; then
+    source "${plugin_cache[$plugin_name]}"
+  else
+    for base in "${plugin_paths[@]}"; do
+      if [[ -f "$base/$plugin_name/$plugin_file" ]]; then
+        plugin_cache[$plugin_name]="$base/$plugin_name/$plugin_file"
+        source "$base/$plugin_name/$plugin_file"
+        break
+      fi
+    done
+  fi
+  
+  # Restore stderr after zsh-abbr
+  if [[ "$plugin_name" == "zsh-abbr" ]]; then
+    exec 2>&3 # Restore stderr
+    exec 3>&- # Close fd 3
+  fi
+}
+
+# Load essential plugins immediately
+for plugin in "${essential_plugins[@]}"; do
+  load_plugin "$plugin"
+done
+
+# Set up deferred loading
+_load_deferred_plugins() {
+  # Only load deferred plugins once
+  [[ -n "$_DEFERRED_LOADED" ]] && return
+  export _DEFERRED_LOADED=1
+  
+  # Load rest of plugins after prompt appears
+  for plugin in "${deferred_plugins[@]}"; do
+    load_plugin "$plugin"
+  done
+  
+  # Remove the precmd hook after plugins are loaded
+  precmd_functions=("${(@)precmd_functions:#_load_deferred_plugins}")
+}
+
+# Add to precmd to run once when prompt first appears
+precmd_functions+=(_load_deferred_plugins)
+
+# ===== ATUIN HISTORY INTEGRATION =====
+if command -v atuin >/dev/null 2>&1; then
+  export ATUIN_NOBIND="true"
+  eval "$(atuin init zsh)"
+  bindkey '^r' _atuin_search_widget
+  bindkey '^[[A' _atuin_up_search_widget
+  bindkey '^[OA' _atuin_up_search_widget
+else
+  # Standard history search if atuin not available
+  bindkey '^[[A' history-substring-search-up 2>/dev/null || bindkey '^[[A' up-line-or-history
+  bindkey '^[[B' history-substring-search-down 2>/dev/null || bindkey '^[[B' down-line-or-history
+fi
+
+# === Zoxide Smart Directory Navigation ===
+if command -v zoxide &>/dev/null; then
+  eval "$(zoxide init zsh)"
+fi
+
+# === Starship Prompt ===
+if command -v starship &>/dev/null; then
+  eval "$(starship init zsh)"
+fi
+
+# Lazy-loading for slow tool completions
+_load_kubectl() {
+  source <(kubectl completion zsh 2>/dev/null)
+  # Replace the function with a no-op
+  _load_kubectl() { :; }
+}
+
+_load_helm() {
+  source <(helm completion zsh 2>/dev/null)
+  _load_helm() { :; }
+}
+
+# === Lazy-loaded completions ===
+kubectl() {
+  unfunction kubectl
+  _load_kubectl
+  kubectl "$@"
+}
+
+helm() {
+  unfunction helm
+  _load_helm
+  helm "$@"
+}
+
+# === FZF Integration (cross-platform, simplified) ===
+if command -v fzf >/dev/null 2>&1; then
+  # Use a more efficient loading strategy
+  for dir in "/usr/share/doc/fzf/examples" "/usr/share/fzf" "/opt/homebrew/opt/fzf/shell" "$(command -v fzf-share 2>/dev/null)"; do
+    if [[ -r "${dir}/completion.zsh" ]]; then
+      source "${dir}/completion.zsh"
+      [[ -r "${dir}/key-bindings.zsh" ]] && source "${dir}/key-bindings.zsh"
+      break
+    fi
+  done
+fi
+
+# Avoid calling brew --prefix, which is slow (cache the result)
+if command -v brew >/dev/null 2>&1; then
+  # Cache brew prefix
+  if [[ -d "/opt/homebrew" ]]; then
+    _brew_prefix="/opt/homebrew"
+  elif [[ -d "/usr/local" ]]; then
+    _brew_prefix="/usr/local"
+  else
+    _brew_prefix="$(brew --prefix)"
+  fi
+  FPATH="${_brew_prefix}/share/zsh/site-functions:${FPATH}"
+fi
+
+# Docker completions
+if [[ -d "$HOME/.docker/completions" ]]; then
+  fpath=("$HOME/.docker/completions" $fpath)
+fi
+
+# === COMPLETION STYLES ===
+# Only set completion styles if compinit has been loaded
+if [[ -n "$functions[compdef]" ]]; then
+  # NOTE: All these styles are now set in _deferred_completion_setup
+  : # Do nothing, using : as a no-op
+fi
+
+# Use noglob with package managers to avoid having to quote wildcards
+if [[ "$OSTYPE" == "darwin"* ]]; then
+  alias bi='noglob brew install'
+  alias brew='noglob brew'
+fi
+
+# You-Should-Use Configuration (export for persistence)
+if typeset -f _ysu_message >/dev/null 2>&1; then
+  export YSU_MESSAGE_FORMAT="💡 %alias_type: %alias → %command"
+  export YSU_MODE="ALL"
+fi
+
+# Faster homebrew initialization (avoid calling brew shellenv which is slow)
+if [[ "$OSTYPE" == "darwin"* ]] && [[ -d "/opt/homebrew" ]]; then
+  export HOMEBREW_PREFIX="/opt/homebrew"
+  export HOMEBREW_CELLAR="/opt/homebrew/Cellar"
+  export HOMEBREW_REPOSITORY="/opt/homebrew"
+  export PATH="/opt/homebrew/bin:/opt/homebrew/sbin${PATH:+:$PATH}"
+  export MANPATH="/opt/homebrew/share/man${MANPATH:+:$MANPATH}"
+  export INFOPATH="/opt/homebrew/share/info${INFOPATH:+:$INFOPATH}"
+  export HOMEBREW_NO_ENV_HINTS=1
+  export HOMEBREW_NO_ANALYTICS=1
+  export HOMEBREW_AUTOREMOVE=1
+  export HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK=1
+  export HOMEBREW_BAT=1
+  export HOMEBREW_INSTALL_FROM_API=1
+elif [[ "$OSTYPE" == "darwin"* ]] && [[ -d "/usr/local/homebrew" ]]; then
+  # For Intel Macs
+  export HOMEBREW_PREFIX="/usr/local"
+  export HOMEBREW_CELLAR="/usr/local/Cellar"
+  export HOMEBREW_REPOSITORY="/usr/local/Homebrew"
+  export PATH="/usr/local/bin:/usr/local/sbin${PATH:+:$PATH}"
+  export MANPATH="/usr/local/share/man${MANPATH:+:$MANPATH}"
+  export INFOPATH="/usr/local/share/info${INFOPATH:+:$INFOPATH}"
+  export HOMEBREW_NO_ENV_HINTS=1
+  export HOMEBREW_NO_ANALYTICS=1
+  export HOMEBREW_AUTOREMOVE=1
+  export HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK=1
+  export HOMEBREW_BAT=1
+  export HOMEBREW_INSTALL_FROM_API=1
+fi
+
+# ===== ALIASES =====
+source "${HOME}/.aliases.zsh" 2>/dev/null || {
+  # Directory Navigation
+  alias ..='cd ..'
+  alias ...='cd ../..'
+  alias ....='cd ../../..'
+  alias :q='exit'
+
+  # List Directory Contents (using eza if available)
+  if command -v eza >/dev/null 2>&1; then
+    alias ls='eza --icons --group-directories-first'
+    alias ll='eza --icons --group-directories-first -l'
+    alias la='eza --icons --group-directories-first -la'
+    alias lt='eza --icons --group-directories-first --tree'
+    alias l='eza --icons --group-directories-first -l'
+  else
+    if ls --color=auto &>/dev/null; then
+      alias ls='ls --color=auto'
+    elif ls -G &>/dev/null; then
+      alias ls='ls -G'
+    fi
+    alias ll='ls -lh'
+    alias la='ls -lah'
+    alias l='ls -lh'
+  fi
+
+  # File Operations
+  alias mkdir='mkdir -p'
+  alias cp='cp -i'
+  alias mv='mv -i'
+  alias rm='rm -i'
+
+  # Git Aliases
+  alias g='git status -sb'
+  alias ga='git add'
+  alias gc='git commit'
+  alias gcm='git commit -m'
+  alias gca='git commit --amend'
+  alias gco='git checkout'
+  alias gd='git diff --color-words'
+  alias gl='git log --graph --pretty=format:"%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset" --abbrev-commit'
+  alias gp='git push'
+  alias gpl='git pull --rebase'
+  alias gf='git fetch'
+  alias gfa='git fetch --all'
+  alias gst='git status'
+  alias gss='git stash save'
+  alias gsp='git stash pop'
+  alias gr='git rebase -i HEAD~15'
+
+  # Utility Aliases
+  alias reload='source $HOME/.zshrc'
+  alias zshrc='$EDITOR $HOME/.zshrc'
+  alias c='clear'
+  alias h='history'
+  alias weather='curl wttr.in'
+  alias myip='curl ifconfig.me'
+  alias timestamp='date "+%Y%m%d_%H%M%S"'
+}
+
+# ===== AUTO-LOADING FUNCTIONS ON DEMAND =====
+# Create directory for functions but don't try to autoload from it
+[[ -d "${XDG_DATA_HOME:-$HOME/.local/share}/zsh/functions" ]] || mkdir -p "${XDG_DATA_HOME:-$HOME/.local/share}/zsh/functions"
+
+# Add functions directory to fpath but don't autoload yet
+fpath=("${XDG_DATA_HOME:-$HOME/.local/share}/zsh/functions" $fpath)
+
+# Auto-title terminals with current directory
+function set_win_title() {
+  echo -ne "\033]0;$(basename "$PWD")\007"
+}
+chpwd_functions+=(set_win_title)
+set_win_title # Initial call
+
+# ===== TOOL CONFIGURATION =====
+# FZF Configuration
+if command -v fzf >/dev/null 2>&1; then
+  export FZF_DEFAULT_OPTS="--height 40% --layout=reverse --border"
+
+  if command -v eza >/dev/null 2>&1; then
+    export FZF_DEFAULT_COMMAND="eza --all --long --group --icons"
+  elif command -v fd >/dev/null 2>&1; then
+    export FZF_DEFAULT_COMMAND="fd --type f --hidden --follow --exclude .git"
+  else
+    export FZF_DEFAULT_COMMAND="find . -type f -not -path '*/\.git/*'"
+  fi
+
+  export FZF_CTRL_T_COMMAND="$FZF_DEFAULT_COMMAND"
+fi
+
+# Node.js Configuration (macOS)
+if [[ "$OSTYPE" == "darwin"* ]] && [ -d "/opt/homebrew/opt/node@20" ]; then
+  export NODE_HOME="/opt/homebrew/opt/node@20"
+  export CPPFLAGS="${CPPFLAGS} -I${NODE_HOME}/include"
+  export LDFLAGS="${LDFLAGS} -L${NODE_HOME}/lib"
+fi
+
+# Starship Configuration
+export STARSHIP_CONFIG="${XDG_CONFIG_HOME:-$HOME/.config}/starship.toml"
+
+# ===== THEFUCK INTEGRATION =====
+if [[ "$OSTYPE" == "darwin"* ]] && command -v thefuck >/dev/null 2>&1; then
+  # Load thefuck on first use
+  fuck() {
+    unfunction fuck
+    eval "$(thefuck --alias)"
+    fuck "$@"
+  }
+fi
+
+# ===== DIRENV INTEGRATION =====
+if command -v direnv >/dev/null 2>&1; then
+  eval "$(direnv hook zsh)"
+fi
+
+# ===== PLATFORM/OS SPECIFIC CONFIGS =====
+if [[ "$OSTYPE" == "darwin"* ]]; then
+  # Load iTerm2 Integration on macOS
+  if [ -e "${HOME}/.iterm2_shell_integration.zsh" ]; then
+    source "${HOME}/.iterm2_shell_integration.zsh"
+  fi
+  [ -r "$HOME/.zsh_os/macos.zsh" ] && source "$HOME/.zsh_os/macos.zsh"
+elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
+  # Linux paths
+  [[ -d /snap/bin ]] && export PATH="$PATH:/snap/bin"
+  [[ -d /var/lib/flatpak/exports/bin ]] && export PATH="$PATH:/var/lib/flatpak/exports/bin"
+  [[ -d ~/.local/share/flatpak/exports/bin ]] && export PATH="$PATH:~/.local/share/flatpak/exports/bin"
+  [ -r "$HOME/.zsh_os/linux.zsh" ] && source "$HOME/.zsh_os/linux.zsh"
+fi
+
+# ===== LOCAL CONFIGURATION =====
+# Source secure environment variables
+if [ -f "${HOME}/.env" ]; then
+  set -o allexport
+  source "${HOME}/.env"
+  set +o allexport
+fi
+
+# Load local custom plugins if they exist
+if [ -d "$HOME/.zsh_custom" ]; then
+  for file in "$HOME/.zsh_custom"/*.zsh; do
+    [ -r "$file" ] && source "$file"
+  done
+fi
+
+# Load host-specific config
+local host_config="$HOME/.zsh_hosts/$(hostname -s).zsh"
+[ -r "$host_config" ] && source "$host_config"
+
+# The following lines were added by Docker Desktop
+if [[ -d "$HOME/.docker/completions" ]]; then
+  fpath=("$HOME/.docker/completions" $fpath)
+  # Don't call compinit again - it's handled by our deferred loading
+fi
+# End of Docker CLI completions
+
+# ===== END OF .zshrc =====
+# if (( __ZSHRC_PROFILED )); then
+#   zprof
+# fi
