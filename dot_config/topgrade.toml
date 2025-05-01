@@ -95,7 +95,8 @@ no_self_update = false
 # Git repositories to pull
 [git]
 repos = [
-    ".",
+    "/Users/osama/Code",
+    "/Users/osama/.local/share/chezmoi",
 ]
 # Max concurrent git pulls
 max_concurrency = 8
@@ -106,6 +107,7 @@ pull_predefined = true
 
 # Commands to run before anything
 [pre_commands]
+"Keep sudo alive" = "while true; do sudo -v; sleep 60; done &"
 "Network check" = "ping -c1 1.1.1.1"
 "Save Homebrew bundle" = "brew bundle dump --force --file=~/.local/share/chezmoi/Brewfile"
 # "Backup dotfiles" = "tar --exclude-vcs -czf ~/.local/backups/config-$(date +%Y%m%d).tar.gz ~/.zshrc ~/.zprofile ~/.zshenv ~/.config"
@@ -125,3 +127,6 @@ fetch_head = true
 [python]
 enable_pip_review = true
 enable_pipupgrade = true
+
+[post_commands]
+"Kill sudo keep-alive" = "kill $(ps aux | grep '[s]udo -v' | awk '{print $2}')"
