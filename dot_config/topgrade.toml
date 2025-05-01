@@ -96,7 +96,6 @@ no_self_update = false
 [git]
 repos = [
     "/Users/osama/Code",
-    "/Users/osama/.local/share/chezmoi",
 ]
 # Max concurrent git pulls
 max_concurrency = 8
@@ -108,7 +107,7 @@ pull_predefined = true
 # Commands to run before anything
 [pre_commands]
 "Network check" = "ping -c1 1.1.1.1"
-"Save Homebrew bundle" = "brew bundle dump --force --file=~/.local/share/chezmoi/Brewfile"
+"Save Homebrew bundle" = "brew bundle dump --force --file=~/Code/osamakaram/dotfiles/Brewfile"
 # "Backup dotfiles" = "tar --exclude-vcs -czf ~/.local/backups/config-$(date +%Y%m%d).tar.gz ~/.zshrc ~/.zprofile ~/.zshenv ~/.config"
 
 # Custom commands for specific tools

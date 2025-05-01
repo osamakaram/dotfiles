@@ -1,0 +1,6 @@
+model: o4-mini
+provider: openai
+approvalMode: suggest
+instructions: |
+  You are Codex, a coding assistant.
+workdir: .
