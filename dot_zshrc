@@ -292,7 +292,6 @@ if [[ "$OSTYPE" == "darwin"* ]] && [[ -d "/opt/homebrew" ]]; then
   export INFOPATH="/opt/homebrew/share/info${INFOPATH:+:$INFOPATH}"
   export HOMEBREW_NO_ENV_HINTS=1
   export HOMEBREW_NO_ANALYTICS=1
-  export HOMEBREW_AUTOREMOVE=1
   export HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK=1
   export HOMEBREW_BAT=1
   export HOMEBREW_INSTALL_FROM_API=1
@@ -306,7 +305,6 @@ elif [[ "$OSTYPE" == "darwin"* ]] && [[ -d "/usr/local/homebrew" ]]; then
   export INFOPATH="/usr/local/share/info${INFOPATH:+:$INFOPATH}"
   export HOMEBREW_NO_ENV_HINTS=1
   export HOMEBREW_NO_ANALYTICS=1
-  export HOMEBREW_AUTOREMOVE=1
   export HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK=1
   export HOMEBREW_BAT=1
   export HOMEBREW_INSTALL_FROM_API=1
@@ -461,14 +459,15 @@ fi
 local host_config="$HOME/.zsh_hosts/$(hostname -s).zsh"
 [ -r "$host_config" ] && source "$host_config"
 
-# The following lines were added by Docker Desktop
-if [[ -d "$HOME/.docker/completions" ]]; then
-  fpath=("$HOME/.docker/completions" $fpath)
-  # Don't call compinit again - it's handled by our deferred loading
-fi
-# End of Docker CLI completions
-
 # ===== END OF .zshrc =====
 # if (( __ZSHRC_PROFILED )); then
 #   zprof
 # fi
+
+# pnpm
+export PNPM_HOME="/Users/osama/.local/share/pnpm"
+case ":$PATH:" in
+  *":$PNPM_HOME:"*) ;;
+  *) export PATH="$PNPM_HOME:$PATH" ;;
+esac
+# pnpm end
